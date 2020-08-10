@@ -1,0 +1,204 @@
+---
+title: "Defining Intraindividual Variability in Symptoms"
+subtitle: "Sum Scores versus Items"
+# author: "Milan Wiedemann"
+output:
+  html_document:
+    df_print: paged
+    code_folding: hide
+editor_options: 
+  chunk_output_type: console
+bibliography: references.bib
+link-citations: TRUE
+---
+
+```{r, message=FALSE}
+# Load packages ----
+library(tidyverse)
+library(patchwork)
+```
+
+### @Shalom2018 definition of intraindividual variability in symptoms
+
+@Shalom2018 define intraindividual variability in symptoms as weekly changes in sum score of multiple item measures, see formula below.
+When predicting sudden gains by intraindividual variability prior to the gain, the authors mention that this measure was only calculated when **four or more** session by session intervals were available to increase the reliability.
+As a results sudden gains that occurred early in treatment (before session 5) were excluded from this particular analysis.
+In studies where a substantial subgroup of participants experience gains early in treatment, this may be problematic.
+This is of course less problematic when **pretreatment** intraindividual variability is used as a predictor for sudden gains [@Shalom2020a]. 
+
+$$\sum^{s=N}_{s=1}\left(\frac{|\Delta_{s},s+1|}{N}\right)$$
+
+
+
+### Create example data (item by item)
+
+Building on results from their earlier study @Shalom2020a investigate **pretreatment and within-treatment** intraindividual variability in the **sum scores** of two symptom measures that were administered weekly: (a) the severity of social anxiety was measured using the 17-item Social Phobia Inventory (SPIN) and (b) depressed mood was measured using the 9-item version of the Patient Health Questionnaire (PHQ-9).
+
+@Shalom2018 definition of intraindividual variability focuses on the severity of the main outcome measure but does not account for **item by item symptom changes**.
+Depending on the research question and definition of intraindividual variability in symptoms both methods may be valid, but potentially measure different aspects. 
+I demonstrate this problem in the following example:
+
+First, I create a dataset with 5 participants who were assessed with a 2-item measure during 7 sessions.
+
+- `id`: ID variable
+- `n`: Indicates an event, in this case "sudden gain"
+- `x_s1_i1` - `x_s7_i2`: Item by item measures
+
+```{r }
+# Create data ----
+data <- tribble(~id,  ~n, ~x_s1_i1, ~x_s1_i2, ~x_s2_i1, ~x_s2_i2, ~x_s3_i1, ~x_s3_i2, ~x_s4_i1, ~x_s4_i2, ~x_s5_i1, ~x_s5_i2, ~x_s6_i1, ~x_s6_i2, ~x_s7_i1, ~x_s7_i2,
+                  1,   5,        3,       3,        3,        2,        3,        2,        3,        3,        2,        3,        1,        0,        0,        0,
+                  2,   3,        2,       3,        2,        3,        3,        3,        0,        1,        1,        0,        0,        0,        0,        0,
+                  3,  NA,        1,       3,        1,        2,        1,        2,        1,        2,        2,        1,        1,        2,        1,        1,
+                  4,   5,        3,       2,        3,        3,        3,        1,        3,        2,        2,        2,        0,        0,        0,        0,
+                  5,   6,        2,       2,        1,        3,        3,        1,        2,        2,        3,        1,        2,        2,        0,        0)
+
+data
+```
+
+### Calculating sum scores
+
+Next, I'm calculating sum scores for each participant at every session.
+Note that this a very basic example data set with no missing values.
+If there were missing values, this code would have to be changed depending on whether sum scores should be prorated or not.
+
+```{r, warning=FALSE}
+
+# Create list of variable names
+var_names_item <- c("x_s1_i1", "x_s1_i2", 
+                    "x_s2_i1", "x_s2_i2", 
+                    "x_s3_i1", "x_s3_i2", 
+                    "x_s4_i1", "x_s4_i2", 
+                    "x_s5_i1", "x_s5_i2", 
+                    "x_s6_i1", "x_s6_i2", 
+                    "x_s7_i1", "x_s7_i2")
+
+data_sum <- data %>% 
+  pivot_longer(cols = all_of(var_names_item), 
+               names_to = c("measure", "session", "item"),
+               names_pattern = "(.)_(.*)_(.*)") %>% 
+  group_by(id, measure, session) %>% 
+  mutate(sum = sum(value)) %>% 
+  select(id, n, measure, session, sum) %>% 
+  distinct() %>% 
+  pivot_wider(names_from = c(measure, session), values_from = sum)
+
+data_sum
+```
+
+### Intraindividual Variability - Sum Scores
+
+This figure shows the trajectories of sum scores, not that `id = 5` (purple line) shows no changes in the sum score from session 1 to session 6.
+
+```{r fig.height=5, fig.width=5}
+var_names_sum <- paste0("x_s", 1:7)
+
+data_sum %>%
+  pivot_longer(all_of(var_names_sum),
+               names_to = c("measure", "session"),
+               names_pattern = "(.)_(.*)") %>% 
+  ggplot(aes(x = session, y = value, group = factor(id), colour =factor(id))) +
+  geom_line() +
+  geom_point() +
+  labs(colour = "ID") +
+    scale_colour_viridis_d(direction = -1)
+
+
+```
+
+This code is counting the "variability" in sum scores prior to session 'n' using `slice(c(1:unique(n)))`.
+
+```{r, warning=FALSE}
+
+data_change_sum <- data_sum %>% 
+  filter(n > 4) %>%
+  pivot_longer(all_of(var_names_sum),
+               names_to = c("measure", "session"),
+               names_pattern = "(.)_(.*)") %>% 
+  mutate(session = as.numeric(str_extract(session, "\\d+"))) %>% 
+  group_by(id, measure) %>%
+  slice(c(1:unique(n))) %>% 
+  mutate(diff_abs = abs(value - lag(value))) %>% 
+  mutate(lag_value = lag(value),
+         diff_value = value - lag_value,
+         value_change = sum(diff(sign(diff_value)) != 0, na.rm = T)) %>% 
+  ungroup() %>% 
+  select(id, n, measure, value_change) %>% 
+  distinct() 
+
+data_change_sum
+```
+
+### Intraindividual Variability - Item by Item
+
+Now we look at "variability" on each item.
+Note that `id = 5` did not fluctuate on the sum scores but shows changes on the  item by item level.
+
+```{r fig.height=5, fig.width=10}
+
+id5_sum <- data_sum %>%
+  filter(id == 5) %>% 
+  pivot_longer(all_of(var_names_sum),
+               names_to = c("measure", "session"),
+               names_pattern = "(.)_(.*)") %>% 
+  ggplot(aes(x = session, y = value, group = factor(id), colour =factor(id))) +
+  geom_line(colour = "#440154FF") +
+  geom_point(colour = "#440154FF") +
+  scale_y_continuous(limits = c(0,4)) +
+  ggtitle("Sum Score for ID 5") +
+  labs(colour = "ID")
+
+id5_item <- data %>%
+  filter(id == 5) %>% 
+  pivot_longer(cols = all_of(var_names_item), 
+               names_to = c("measure", "session", "item"),
+               names_pattern = "(.)_(.*)_(.*)") %>% 
+  ggplot(aes(x = session, y = value, group = interaction(id, item), colour = interaction(id, item))) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(limits = c(0,4)) +
+  ggtitle("Item Scores for ID 5") +
+  labs(colour = "Item") 
+
+id5_sum + id5_item
+```
+
+```{r, warning=FALSE}
+
+data_change_item <- data %>% 
+  filter(n > 4) %>%
+  pivot_longer(cols = all_of(var_names_item), 
+               names_to = c("measure", "session", "item"),
+               names_pattern = "(.)_(.*)_(.*)") %>% 
+  mutate(session = as.numeric(str_extract(session, "\\d+")),
+         item = as.numeric(str_extract(item, "\\d+"))) %>% 
+  group_by(id, measure, item) %>%
+  slice(c(1:n)) %>% 
+  mutate(diff_abs = abs(value - lag(value))) %>% 
+  mutate(lag_value = lag(value),
+         diff_value = value - lag_value,
+         value_change = sum(diff(sign(diff_value)) != 0, na.rm = T)) %>% 
+  ungroup() %>% 
+  select(id, n, measure, item, value_change) %>% 
+  distinct()
+
+data_change_item
+```
+
+### Conclusion 
+
+This theoretical example demonstrates that @Shalom2018 definition of intraindividual variability might miss aspects of symptom changes on an item by item level.
+Depending on the definition and research question this could actually be desired.
+Only of variability on an item by item level is of theoretical interest it would be important to consider an adaptation of the method proposed by @Shalom2018.
+
+For example `id = 5` shows no variability in the sum scores but most variability in item scores compared to other participants.
+One potential way to address this would be to include item by item changes in the formula instead of changes in sum scores as indicated by the index `i` in $\Delta_{s_i}$, see the adapted formula below:
+
+$$\sum^{s=N}_{s=1}\left(\frac{|\Delta_{s_i},s+1|}{N}\right)$$
+
+<!-- I have developed R code that replicates the method proposed by @Shalom2018 to facilitate replication studies. -->
+<!-- Furthermore, I provide code that allows to test more subtle changes of intraindividual variability on an item by item level. -->
+<!-- The code is scalable and can be applied to any number of constructs. -->
+<!-- This would for example allow to not only test variability in one or two symptom measures, but also relevant therapeutic processes such as cognitions or emotions, provided that variability in these measures is hypothesised to be an important aspect of clinical improvement. -->
+
+# References
