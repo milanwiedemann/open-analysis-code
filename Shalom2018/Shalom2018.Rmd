@@ -1,7 +1,7 @@
 ---
 title: "Defining Intraindividual Variability in Symptoms"
 subtitle: "Sum Scores versus Items"
-# author: "Milan Wiedemann"
+author: "Milan Wiedemann"
 output:
   html_document:
     df_print: paged
@@ -107,6 +107,8 @@ data_sum %>%
 ```
 
 This code is counting the "variability" in sum scores prior to session 'n' using `slice(c(1:unique(n)))`.
+The variable `freq_value_change` indicates the frequency of changes in sum scores, whereas `sum_value_change` indicates the sum of changes.
+Note that `id = 2` was excluded because the event n occurred before time point 5 and `id = 3` was excluded because no event occurred.
 
 ```{r, warning=FALSE}
 
@@ -121,10 +123,11 @@ data_change_sum <- data_sum %>%
   mutate(diff_abs = abs(value - lag(value))) %>% 
   mutate(lag_value = lag(value),
          diff_value = value - lag_value,
-         value_change = sum(diff(sign(diff_value)) != 0, na.rm = T)) %>% 
-  ungroup() %>% 
-  select(id, n, measure, value_change) %>% 
-  distinct() 
+         freq_value_change = sum(diff(sign(diff_value)) != 0, na.rm = T),
+         sum_value_change = sum(abs(diff_value), na.rm = T)) %>% 
+  ungroup() %>%
+  select(id, n, measure, freq_value_change, sum_value_change) %>%
+  distinct()
 
 data_change_sum
 ```
@@ -132,7 +135,8 @@ data_change_sum
 ### Intraindividual Variability - Item by Item
 
 Now we look at "variability" on each item.
-Note that `id = 5` did not fluctuate on the sum scores but shows changes on the  item by item level.
+Note that `id = 5` did not fluctuate on the sum scores but shows most changes on the item by item level.
+
 
 ```{r fig.height=5, fig.width=10}
 
@@ -173,13 +177,14 @@ data_change_item <- data %>%
   mutate(session = as.numeric(str_extract(session, "\\d+")),
          item = as.numeric(str_extract(item, "\\d+"))) %>% 
   group_by(id, measure, item) %>%
-  slice(c(1:n)) %>% 
+  slice(c(1:unique(n))) %>% 
   mutate(diff_abs = abs(value - lag(value))) %>% 
   mutate(lag_value = lag(value),
          diff_value = value - lag_value,
-         value_change = sum(diff(sign(diff_value)) != 0, na.rm = T)) %>% 
+         freq_value_change = sum(diff(sign(diff_value)) != 0, na.rm = T),
+                  sum_value_change = sum(abs(diff_value), na.rm = T)) %>% 
   ungroup() %>% 
-  select(id, n, measure, item, value_change) %>% 
+  select(id, n, measure, item, freq_value_change, sum_value_change) %>% 
   distinct()
 
 data_change_item
@@ -188,11 +193,9 @@ data_change_item
 ### Conclusion 
 
 This theoretical example demonstrates that @Shalom2018 definition of intraindividual variability might miss aspects of symptom changes on an item by item level.
-Depending on the definition and research question this could actually be desired.
-Only of variability on an item by item level is of theoretical interest it would be important to consider an adaptation of the method proposed by @Shalom2018.
-
-For example `id = 5` shows no variability in the sum scores but most variability in item scores compared to other participants.
-One potential way to address this would be to include item by item changes in the formula instead of changes in sum scores as indicated by the index `i` in $\Delta_{s_i}$, see the adapted formula below:
+Depending on the definition and research question this could actually be desired and might not be problematic.
+Only if variability on an item by item level is of theoretical interest it would be important to consider an adaptation of the method proposed by @Shalom2018.
+One potential way to address this would be to include item by item changes (see demonstration above) in the formula instead of changes in sum scores as indicated by the index `i` in $\Delta_{s_i}$, see the adapted formula below:
 
 $$\sum^{s=N}_{s=1}\left(\frac{|\Delta_{s_i},s+1|}{N}\right)$$
 
