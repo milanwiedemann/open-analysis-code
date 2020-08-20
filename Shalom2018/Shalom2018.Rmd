@@ -18,7 +18,7 @@ library(tidyverse)
 library(patchwork)
 ```
 
-### @Shalom2018 definition of intraindividual variability in symptoms
+## @Shalom2018 definition of intraindividual variability in symptoms
 
 @Shalom2018 define intraindividual variability in symptoms as weekly changes in sum score of multiple item measures, see formula below.
 When predicting sudden gains by intraindividual variability prior to the gain, the authors mention that this measure was only calculated when **four or more** session by session intervals were available to increase the reliability.
@@ -190,7 +190,7 @@ data_change_item <- data %>%
 data_change_item
 ```
 
-### Conclusion 
+## Conclusion 
 
 This theoretical example demonstrates that @Shalom2018 definition of intraindividual variability might miss aspects of symptom changes on an item by item level.
 Depending on the definition and research question this could actually be desired and might not be problematic.
